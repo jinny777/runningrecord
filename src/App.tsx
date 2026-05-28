@@ -32,7 +32,7 @@ function App() {
       }
     })
 
-    const { data: sub } = auth.onAuthChange((_event, sess) => {
+    const { data: sub } = auth.onAuthChange(async (_event, sess) => {
       setSession(sess)
       setSessionStore(sess)
       if (sess?.user) {
