@@ -5,11 +5,9 @@ import type {
 } from '../types'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
+  || 'https://bpwjkqacuvjorvohjhzh.supabase.co'
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('.env에 VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY를 설정해주세요.')
-}
+  || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwd2prcWFjdXZqb3J2b2hqaHpoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MzM3NTgsImV4cCI6MjA5NTUwOTc1OH0.D9Jdr-V0jvtKqIWxHmJtxXriU6EVwjoQqI4aVAp2_4M'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
