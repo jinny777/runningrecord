@@ -19,7 +19,7 @@ const DIRECT_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined
 
 // ─── Edge Function 호출 헬퍼 ────────────────────────────────────────────────────
 
-async function callEdgeFunction<T>(fnName: string, body: unknown): Promise<T> {
+async function callEdgeFunction<T>(fnName: string, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke<T>(fnName, { body })
   if (error) throw new Error(error.message)
   return data as T
@@ -200,7 +200,7 @@ export interface ReportOutput {
 
 export async function generateReport(input: ReportInput): Promise<ReportOutput> {
   if (!USE_DIRECT) {
-    return callEdgeFunction<ReportOutput>('generate-report', input)
+    return callEdgeFunction<ReportOutput>('generate-report', input as unknown as Record<string, unknown>)
   }
 
   const { buildReportPrompt } = await import('../services/claude-prompts')
