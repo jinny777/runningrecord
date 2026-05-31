@@ -185,3 +185,49 @@ export async function generateIntegratedAnalysis(context: WorkoutContext): Promi
     systemPrompt,
   )
 }
+
+// ─── 범용 이미지 텍스트 추출 + 분석 ─────────────────────────────────────────────
+
+export interface ImageAnalysisResult {
+  extractedText: string       // 이미지에서 추출한 원본 텍스트
+  analysis: string            // AI 분석 결과
+  dataType: string            // 감지된 데이터 유형
+  structuredData?: Record<string, unknown>  // 구조화된 데이터 (가능한 경우)
+}
+
+export async function analyzeImageText(
+  imageBase64: string,
+  mimeType: string,
+  userQuestion?: string,
+): Promise<ImageAnalysisResult> {
+  const prompt = `이미지에서 모든 텍스트를 추출하고 분석해주세요.
+
+다음 JSON 형식으로 응답하세요 (마크다운 없이):
+{
+  "extractedText": "이미지에서 추출한 모든 텍스트 (원본 그대로)",
+  "dataType": "감지된 데이터 유형 (예: 운동기록, 체중계, 식단, 검진결과, 처방전, 기타)",
+  "analysis": "추출된 텍스트를 기반으로 한 건강/피트니스 관점의 분석 (한국어, 2-4문장)",
+  "structuredData": {
+    // 감지된 데이터가 있으면 구조화 (숫자, 날짜 등)
+  }
+}
+
+${userQuestion ? `특별히 분석해줄 내용: ${userQuestion}` : '건강 및 피트니스 관련 인사이트를 제공해주세요.'}`
+
+  const text = await generateWithImage(
+    imageBase64,
+    mimeType,
+    prompt,
+    '당신은 건강 데이터 분석 전문가입니다. 이미지의 텍스트를 정확히 추출하고 건강 관점에서 분석합니다. JSON만 출력.',
+  )
+
+  try {
+    return JSON.parse(text.replace(/```json\n?|\n?```/g, '').trim()) as ImageAnalysisResult
+  } catch {
+    return {
+      extractedText: text,
+      analysis: text,
+      dataType: '기타',
+    }
+  }
+}

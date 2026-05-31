@@ -13,6 +13,7 @@ import Analysis from './pages/Analysis'
 import Goals from './pages/Goals'
 import Reports from './pages/Reports'
 import Coach from './pages/Coach'
+import ImageAnalysis from './pages/ImageAnalysis'
 import AuthPage from './pages/Auth'
 
 function App() {
@@ -74,6 +75,7 @@ function App() {
             <Route path="goals" element={<Goals />} />
             <Route path="reports" element={<Reports />} />
             <Route path="coach" element={<Coach />} />
+            <Route path="image-analysis" element={<ImageAnalysis />} />
           </Route>
         ) : (
           <Route path="*" element={<Navigate to="/auth" replace />} />

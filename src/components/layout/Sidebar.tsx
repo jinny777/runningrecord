@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   Activity, Scale, BarChart2, Target, FileText,
-  MessageSquare, LogOut, Zap, Menu, X,
+  MessageSquare, LogOut, Zap, Menu, X, ScanText,
 } from 'lucide-react'
 import { useState } from 'react'
 import { auth } from '../../lib/supabase'
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { to: '/goals', icon: Target, label: '목표 관리' },
   { to: '/reports', icon: FileText, label: '리포트' },
   { to: '/coach', icon: MessageSquare, label: 'AI 코치' },
+  { to: '/image-analysis', icon: ScanText, label: '이미지 분석' },
 ]
 
 export default function Sidebar() {
