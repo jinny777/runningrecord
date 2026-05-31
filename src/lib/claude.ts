@@ -18,7 +18,7 @@ function getClient() {
 async function generateText(prompt: string, system?: string): Promise<string> {
   const genAI = getClient()
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.0-flash',
     systemInstruction: system,
   })
   const result = await model.generateContent(prompt)
@@ -33,7 +33,7 @@ async function generateWithImage(
 ): Promise<string> {
   const genAI = getClient()
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.0-flash',
     systemInstruction: system,
   })
 
@@ -130,7 +130,7 @@ export async function askHealthCoach(
 
   const genAI = getClient()
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.0-flash',
     systemInstruction: systemPrompt,
   })
 
