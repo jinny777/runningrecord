@@ -187,7 +187,18 @@ export async function analyzeImageText(
     imageBase64, mimeType,
     `이미지에서 모든 텍스트를 추출하고 분석하세요.
 JSON만 응답 (마크다운 없이):
-{"extractedText":"추출된 텍스트 원본","dataType":"운동기록|체중계|식단|검진결과|처방전|기타","analysis":"건강 관점 분석 2-4문장(한국어)","structuredData":{}}
+{
+  "extractedText": "추출된 텍스트 원본",
+  "dataType": "운동기록|체중계|식단|검진결과|처방전|기타",
+  "analysis": "건강 관점 분석 2-4문장(한국어)",
+  "structuredData": {
+    // 운동기록인 경우: type, duration_seconds, distance_km, avg_pace_seconds, avg_heart_rate, max_heart_rate, calories, elevation_gain_m, date
+    // 체중계인 경우: weight_kg, body_fat_pct, muscle_mass_kg, water_pct, bmi, date
+    // 식단인 경우: calories, protein_g, carbs_g, fat_g
+    // 검진결과인 경우: 해당 수치들
+  }
+}
+없는 필드는 생략. 마일→km(×1.609). 페이스→초/km. 파운드→kg(×0.4536).
 ${userQuestion ? `특별 분석 요청: ${userQuestion}` : ''}`,
     '건강 데이터 분석 전문가. JSON만 출력.',
   )
