@@ -1,58 +1,54 @@
 /**
- * Claude API 클라이언트
- *
- * 프로덕션: Supabase Edge Function을 통해 호출 (API 키 노출 방지)
- * 개발 데모: VITE_USE_DIRECT_CLAUDE=true 설정 시 직접 호출
- *
- * Edge Function 엔드포인트:
- *   - /functions/v1/analyze-ocr
- *   - /functions/v1/health-coach
- *   - /functions/v1/generate-report
+ * AI 클라이언트 — Google Gemini (무료 티어)
+ * 모델: gemini-1.5-flash (vision + text, 무료)
+ * API 키: https://aistudio.google.com/apikey
  */
 
-import { supabase } from './supabase'
+import { GoogleGenerativeAI, type Part } from '@google/generative-ai'
 import type { WorkoutOCRResult, WeightOCRResult, CoachMessage } from '../types'
 import type { WorkoutContext } from '../services/claude-prompts'
 
-const USE_DIRECT = import.meta.env.VITE_USE_DIRECT_CLAUDE === 'true'
-const DIRECT_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
 
-// ─── Edge Function 호출 헬퍼 ────────────────────────────────────────────────────
-
-async function callEdgeFunction<T>(fnName: string, body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke<T>(fnName, { body })
-  if (error) throw new Error(error.message)
-  return data as T
+function getClient() {
+  if (!API_KEY) throw new Error('VITE_GEMINI_API_KEY가 설정되지 않았습니다.')
+  return new GoogleGenerativeAI(API_KEY)
 }
 
-// ─── 직접 호출 헬퍼 (demo only) ─────────────────────────────────────────────────
+async function generateText(prompt: string, system?: string): Promise<string> {
+  const genAI = getClient()
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    systemInstruction: system,
+  })
+  const result = await model.generateContent(prompt)
+  return result.response.text()
+}
 
-async function callClaudeDirect(messages: { role: string; content: unknown }[], system?: string) {
-  if (!DIRECT_KEY) throw new Error('VITE_ANTHROPIC_API_KEY가 설정되지 않았습니다.')
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': DIRECT_KEY,
-      'anthropic-version': '2023-06-01',
-      'anthropic-beta': 'prompt-caching-2024-07-31',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
-      system: system ? [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }] : undefined,
-      messages,
-    }),
+async function generateWithImage(
+  imageBase64: string,
+  mimeType: string,
+  prompt: string,
+  system?: string,
+): Promise<string> {
+  const genAI = getClient()
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    systemInstruction: system,
   })
 
-  if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.error?.message ?? 'Claude API 오류')
-  }
+  const parts: Part[] = [
+    {
+      inlineData: {
+        data: imageBase64,
+        mimeType: mimeType as 'image/jpeg' | 'image/png' | 'image/webp',
+      },
+    },
+    { text: prompt },
+  ]
 
-  const json = await res.json()
-  return json.content[0]?.text as string
+  const result = await model.generateContent(parts)
+  return result.response.text()
 }
 
 // ─── OCR: 스마트워치 운동 기록 ───────────────────────────────────────────────────
@@ -61,27 +57,11 @@ export async function analyzeWorkoutImage(
   imageBase64: string,
   mimeType: string,
 ): Promise<WorkoutOCRResult> {
-  if (!USE_DIRECT) {
-    return callEdgeFunction<WorkoutOCRResult>('analyze-ocr', {
-      type: 'workout',
-      imageBase64,
-      mimeType,
-    })
-  }
-
-  const text = await callClaudeDirect(
-    [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: { type: 'base64', media_type: mimeType, data: imageBase64 },
-          },
-          {
-            type: 'text',
-            text: `이 스마트워치/피트니스 앱 스크린샷에서 운동 데이터를 추출해주세요.
-다음 JSON 형식으로만 응답하세요 (마크다운 없이):
+  const text = await generateWithImage(
+    imageBase64,
+    mimeType,
+    `이 스마트워치/피트니스 앱 스크린샷에서 운동 데이터를 추출해주세요.
+JSON만 응답하세요 (마크다운 없이):
 {
   "type": "running|walking|cycling|swimming|other",
   "duration_seconds": number,
@@ -92,19 +72,16 @@ export async function analyzeWorkoutImage(
   "max_heart_rate": number,
   "calories": number,
   "elevation_gain_m": number,
-  "date": "YYYY-MM-DD or null",
+  "date": "YYYY-MM-DD 또는 null",
   "confidence": 0.0~1.0,
-  "raw_text": "인식된 원본 텍스트"
+  "raw_text": "인식된 텍스트"
 }
-없는 필드는 null로 설정.`,
-          },
-        ],
-      },
-    ],
+없는 필드는 null. 마일은 km으로 변환(×1.609). 페이스는 초/km.`,
+    '스마트워치 운동 데이터 추출 전문가. JSON만 출력.',
   )
 
   try {
-    return JSON.parse(text) as WorkoutOCRResult
+    return JSON.parse(text.replace(/```json\n?|\n?```/g, '').trim()) as WorkoutOCRResult
   } catch {
     return { confidence: 0, raw_text: text }
   }
@@ -116,73 +93,59 @@ export async function analyzeWeightImage(
   imageBase64: string,
   mimeType: string,
 ): Promise<WeightOCRResult> {
-  if (!USE_DIRECT) {
-    return callEdgeFunction<WeightOCRResult>('analyze-ocr', {
-      type: 'weight',
-      imageBase64,
-      mimeType,
-    })
-  }
-
-  const text = await callClaudeDirect(
-    [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: { type: 'base64', media_type: mimeType, data: imageBase64 },
-          },
-          {
-            type: 'text',
-            text: `이 체중계/스마트 체중계 스크린샷에서 데이터를 추출해주세요.
-다음 JSON 형식으로만 응답하세요 (마크다운 없이):
+  const text = await generateWithImage(
+    imageBase64,
+    mimeType,
+    `이 체중계 스크린샷에서 데이터를 추출해주세요.
+JSON만 응답하세요 (마크다운 없이):
 {
   "weight_kg": number,
   "body_fat_pct": number,
   "muscle_mass_kg": number,
   "water_pct": number,
   "bmi": number,
-  "date": "YYYY-MM-DD or null",
+  "date": "YYYY-MM-DD 또는 null",
   "confidence": 0.0~1.0,
-  "raw_text": "인식된 원본 텍스트"
+  "raw_text": "인식된 텍스트"
 }
-lbs 단위는 kg으로 변환. 없는 필드는 null로.`,
-          },
-        ],
-      },
-    ],
+없는 필드는 null. 파운드는 kg으로 변환(×0.4536).`,
+    '스마트 체중계 데이터 추출 전문가. JSON만 출력.',
   )
 
   try {
-    return JSON.parse(text) as WeightOCRResult
+    return JSON.parse(text.replace(/```json\n?|\n?```/g, '').trim()) as WeightOCRResult
   } catch {
     return { confidence: 0, raw_text: text }
   }
 }
 
-// ─── AI 헬스 코치 채팅 ───────────────────────────────────────────────────────────
+// ─── AI 헬스 코치 ────────────────────────────────────────────────────────────────
 
 export async function askHealthCoach(
   messages: CoachMessage[],
   context: WorkoutContext,
 ): Promise<string> {
-  if (!USE_DIRECT) {
-    return callEdgeFunction<string>('health-coach', { messages, context })
-  }
-
   const { buildCoachSystemPrompt } = await import('../services/claude-prompts')
   const systemPrompt = buildCoachSystemPrompt(context)
 
-  const apiMessages = messages.map(m => ({
-    role: m.role,
-    content: m.content,
+  const genAI = getClient()
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    systemInstruction: systemPrompt,
+  })
+
+  const history = messages.slice(0, -1).map(m => ({
+    role: m.role === 'user' ? 'user' as const : 'model' as const,
+    parts: [{ text: m.content }],
   }))
 
-  return callClaudeDirect(apiMessages, systemPrompt)
+  const lastMessage = messages[messages.length - 1]
+  const chat = model.startChat({ history })
+  const result = await chat.sendMessage(lastMessage.content)
+  return result.response.text()
 }
 
-// ─── 주간/월간 리포트 생성 ───────────────────────────────────────────────────────
+// ─── 리포트 생성 ─────────────────────────────────────────────────────────────────
 
 export interface ReportInput {
   period: 'weekly' | 'monthly'
@@ -199,45 +162,26 @@ export interface ReportOutput {
 }
 
 export async function generateReport(input: ReportInput): Promise<ReportOutput> {
-  if (!USE_DIRECT) {
-    return callEdgeFunction<ReportOutput>('generate-report', input as unknown as Record<string, unknown>)
-  }
-
   const { buildReportPrompt } = await import('../services/claude-prompts')
   const { system, user } = buildReportPrompt(input.period, input.context)
 
-  const text = await callClaudeDirect(
-    [{ role: 'user', content: user }],
-    system,
-  )
+  const text = await generateText(user, system)
 
   try {
-    return JSON.parse(text) as ReportOutput
+    return JSON.parse(text.replace(/```json\n?|\n?```/g, '').trim()) as ReportOutput
   } catch {
-    return {
-      summary: text,
-      highlights: [],
-      recommendations: [],
-      motivationalMessage: '',
-    }
+    return { summary: text, highlights: [], recommendations: [], motivationalMessage: '' }
   }
 }
 
 // ─── 통합 분석 ──────────────────────────────────────────────────────────────────
 
 export async function generateIntegratedAnalysis(context: WorkoutContext): Promise<string> {
-  if (!USE_DIRECT) {
-    return callEdgeFunction<string>('generate-report', {
-      period: 'integrated',
-      context,
-    })
-  }
-
   const { buildIntegratedAnalysisPrompt } = await import('../services/claude-prompts')
   const systemPrompt = buildIntegratedAnalysisPrompt(context)
 
-  return callClaudeDirect(
-    [{ role: 'user', content: '운동과 체중 데이터를 통합 분석해서 인사이트를 제공해주세요.' }],
+  return generateText(
+    '운동과 체중 데이터를 통합 분석해서 인사이트를 제공해주세요.',
     systemPrompt,
   )
 }
