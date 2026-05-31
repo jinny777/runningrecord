@@ -9,7 +9,7 @@ import type { WorkoutOCRResult, WeightOCRResult, CoachMessage } from '../types'
 import type { WorkoutContext } from '../services/claude-prompts'
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
-const BASE_URL = 'https://generativelanguage.googleapis.com/v1/models'
+const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
 const MODEL = 'gemini-1.5-flash'
 
 function getApiKey() {
