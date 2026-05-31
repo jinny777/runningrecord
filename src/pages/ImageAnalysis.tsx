@@ -20,32 +20,42 @@ const DATA_TYPE_EMOJI: Record<string, string> = {
   '기타': '📄',
 }
 
-// structuredData → Workout 변환
-function toWorkout(data: Record<string, unknown>): Partial<Workout> {
+const VALID_TYPES = ['running', 'walking', 'cycling', 'swimming', 'other'] as const
+
+function safeNum(v: unknown): number | undefined {
+  const n = Number(v)
+  return isNaN(n) || n === 0 ? undefined : n
+}
+
+function toWorkout(data: Record<string, unknown>): Omit<Workout, 'id' | 'created_at' | 'user_id'> {
+  const rawType = String(data.type ?? 'running').toLowerCase()
+  const validType = VALID_TYPES.includes(rawType as typeof VALID_TYPES[number])
+    ? rawType as Workout['type'] : 'running'
   return {
-    type: (data.type as Workout['type']) || 'running',
+    type: validType,
     date: (data.date as string) || today(),
-    duration_seconds: data.duration_seconds as number || undefined,
-    distance_km: data.distance_km as number || undefined,
-    avg_pace_seconds: data.avg_pace_seconds as number || undefined,
-    avg_heart_rate: data.avg_heart_rate as number || undefined,
-    max_heart_rate: data.max_heart_rate as number || undefined,
-    calories: data.calories as number || undefined,
-    elevation_gain_m: data.elevation_gain_m as number || undefined,
     source: 'ocr',
+    duration_seconds: safeNum(data.duration_seconds),
+    distance_km: safeNum(data.distance_km),
+    avg_pace_seconds: safeNum(data.avg_pace_seconds),
+    avg_heart_rate: safeNum(data.avg_heart_rate),
+    max_heart_rate: safeNum(data.max_heart_rate),
+    calories: safeNum(data.calories),
+    elevation_gain_m: safeNum(data.elevation_gain_m),
+    raw_ocr_data: data,
   }
 }
 
-// structuredData → WeightRecord 변환
-function toWeightRecord(data: Record<string, unknown>): Partial<WeightRecord> {
+function toWeightRecord(data: Record<string, unknown>): Omit<WeightRecord, 'id' | 'created_at' | 'user_id'> {
   return {
     date: (data.date as string) || today(),
-    weight_kg: data.weight_kg as number,
-    body_fat_pct: data.body_fat_pct as number || undefined,
-    muscle_mass_kg: data.muscle_mass_kg as number || undefined,
-    water_pct: data.water_pct as number || undefined,
-    bmi: data.bmi as number || undefined,
+    weight_kg: Number(data.weight_kg),
+    body_fat_pct: safeNum(data.body_fat_pct),
+    muscle_mass_kg: safeNum(data.muscle_mass_kg),
+    water_pct: safeNum(data.water_pct),
+    bmi: safeNum(data.bmi),
     source: 'ocr',
+    raw_ocr_data: data,
   }
 }
 
@@ -96,56 +106,37 @@ export default function ImageAnalysisPage() {
     }
   }
 
-  // 운동기록으로 저장
   const saveAsWorkout = async () => {
     if (!result?.structuredData || !user) return
     setSaving(true)
     try {
-      const workoutData = toWorkout(result.structuredData)
-      if (!workoutData.date) workoutData.date = today()
       const { data, error } = await workoutApi.create({
-        ...workoutData,
+        ...toWorkout(result.structuredData),
         user_id: user.id,
-        type: workoutData.type || 'running',
-        date: workoutData.date!,
-        source: 'ocr',
-      } as Omit<Workout, 'id' | 'created_at'>)
-      if (error) throw error
-      if (data) {
-        addWorkout(data)
-        setSaved(true)
-        toast.success('운동 기록이 저장되었습니다!')
-      }
-    } catch {
-      toast.error('저장 실패')
+      })
+      if (error) throw new Error(error.message)
+      if (data) { addWorkout(data); setSaved(true); toast.success('운동 기록이 저장되었습니다!') }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '저장 실패')
     } finally {
       setSaving(false)
     }
   }
 
-  // 체중기록으로 저장
   const saveAsWeight = async () => {
     if (!result?.structuredData || !user) return
-    const w = result.structuredData.weight_kg as number
-    if (!w) { toast.error('체중 데이터를 찾을 수 없습니다.'); return }
+    const weightKg = Number(result.structuredData.weight_kg)
+    if (!weightKg) { toast.error('체중 데이터를 찾을 수 없습니다.'); return }
     setSaving(true)
     try {
-      const weightData = toWeightRecord(result.structuredData)
       const { data, error } = await weightApi.create({
-        ...weightData,
+        ...toWeightRecord(result.structuredData),
         user_id: user.id,
-        date: weightData.date!,
-        weight_kg: w,
-        source: 'ocr',
-      } as Omit<WeightRecord, 'id' | 'created_at'>)
-      if (error) throw error
-      if (data) {
-        addWeightRecord(data)
-        setSaved(true)
-        toast.success('체중 기록이 저장되었습니다!')
-      }
-    } catch {
-      toast.error('저장 실패')
+      })
+      if (error) throw new Error(error.message)
+      if (data) { addWeightRecord(data); setSaved(true); toast.success('체중 기록이 저장되었습니다!') }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '저장 실패')
     } finally {
       setSaving(false)
     }
