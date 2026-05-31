@@ -10,7 +10,48 @@ import type { WorkoutContext } from '../services/claude-prompts'
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
-const MODEL = 'gemini-1.5-flash'
+
+// 우선순위 순으로 시도할 모델 목록
+const MODEL_CANDIDATES = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-001',
+  'gemini-pro',
+]
+
+let cachedModel: string | null = null
+
+async function getModel(apiKey: string): Promise<string> {
+  if (cachedModel) return cachedModel
+
+  try {
+    const res = await fetch(`${BASE_URL}?key=${apiKey}`)
+    const data = await res.json()
+    const available: string[] = (data.models ?? [])
+      .filter((m: { supportedGenerationMethods?: string[] }) =>
+        m.supportedGenerationMethods?.includes('generateContent')
+      )
+      .map((m: { name: string }) => m.name.replace('models/', ''))
+
+    for (const candidate of MODEL_CANDIDATES) {
+      if (available.includes(candidate)) {
+        cachedModel = candidate
+        return candidate
+      }
+    }
+    // 못 찾으면 첫 번째 사용 가능한 모델 사용
+    if (available.length > 0) {
+      cachedModel = available[0]
+      return available[0]
+    }
+  } catch {
+    // 목록 조회 실패시 기본값
+  }
+  cachedModel = 'gemini-2.5-flash'
+  return cachedModel
+}
 
 function getApiKey() {
   if (!API_KEY) throw new Error('VITE_GEMINI_API_KEY가 설정되지 않았습니다.\nRender 환경변수에 VITE_GEMINI_API_KEY를 추가해주세요.')
@@ -21,6 +62,7 @@ function getApiKey() {
 
 async function generateText(userPrompt: string, systemPrompt?: string): Promise<string> {
   const key = getApiKey()
+  const model = await getModel(key)
   const contents = []
 
   if (systemPrompt) {
@@ -29,7 +71,7 @@ async function generateText(userPrompt: string, systemPrompt?: string): Promise<
     contents.push({ role: 'user', parts: [{ text: userPrompt }] })
   }
 
-  const res = await fetch(`${BASE_URL}/${MODEL}:generateContent?key=${key}`, {
+  const res = await fetch(`${BASE_URL}/${model}:generateContent?key=${key}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -56,12 +98,13 @@ async function generateWithImage(
   systemPrompt?: string,
 ): Promise<string> {
   const key = getApiKey()
+  const model = await getModel(key)
 
   const textContent = systemPrompt
     ? `[시스템 지시사항]\n${systemPrompt}\n\n[사용자 메시지]\n${prompt}`
     : prompt
 
-  const res = await fetch(`${BASE_URL}/${MODEL}:generateContent?key=${key}`, {
+  const res = await fetch(`${BASE_URL}/${model}:generateContent?key=${key}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -168,7 +211,8 @@ export async function askHealthCoach(
   const last = messages[messages.length - 1]
 
   const key = getApiKey()
-  const res = await fetch(`${BASE_URL}/${MODEL}:generateContent?key=${key}`, {
+  const model = await getModel(key)
+  const res = await fetch(`${BASE_URL}/${model}:generateContent?key=${key}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
