@@ -29,10 +29,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!user) return
+    // 로그인 상태: 서버 데이터로 덮어씌우기
     workoutApi.list(user.id).then(r => { if (r.data) setWorkouts(r.data) })
     weightApi.list(user.id).then(r => { if (r.data) setWeightRecords(r.data) })
     goalApi.list(user.id).then(r => { if (r.data) setGoals(r.data) })
-  }, [user])
+  }, [user?.id])
 
   const weekStats = calcWorkoutStats(thisWeek)
   const weightTrend = calcWeightTrend(weightRecords.slice(0, 30))

@@ -114,9 +114,13 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'fitai-storage',
+      // 로그인 여부 상관없이 로컬에 저장 (게스트 모드 지원)
       partialize: (state) => ({
         activeNav: state.activeNav,
-        coachMessages: state.coachMessages.slice(-50), // 최근 50개만 유지
+        coachMessages: state.coachMessages.slice(-50),
+        workouts: state.workouts.slice(0, 200),       // 최근 200개
+        weightRecords: state.weightRecords.slice(0, 200),
+        goals: state.goals,
       }),
     },
   ),
