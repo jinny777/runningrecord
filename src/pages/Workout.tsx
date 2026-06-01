@@ -29,6 +29,7 @@ export default function WorkoutPage() {
   const [imgFile, setImgFile] = useState<File | null>(null)
   const [imgLoading, setImgLoading] = useState(false)
   const [imgResult, setImgResult] = useState<Partial<WorkoutOCRResult> | null>(null)
+  const [imgDate, setImgDate] = useState<string>(today())
   const [imgSaved, setImgSaved] = useState(false)
   const [imgError, setImgError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -61,9 +62,11 @@ export default function WorkoutPage() {
       const validType = VALID_WORKOUT_TYPES.includes(rawType as typeof VALID_WORKOUT_TYPES[number])
         ? (rawType as Workout['type'])
         : 'running'
+      const extractedDate = sd.date as string | undefined
+      setImgDate(extractedDate || today())
       setImgResult({
         type: validType,
-        date: sd.date as string || undefined,
+        date: extractedDate || today(),
         duration_seconds: Number(sd.duration_seconds) || undefined,
         distance_km: Number(sd.distance_km) || undefined,
         avg_pace_seconds: Number(sd.avg_pace_seconds) || undefined,
@@ -93,7 +96,7 @@ export default function WorkoutPage() {
 
       const workoutData = {
         type: validType,
-        date: imgResult.date || today(),
+        date: imgDate,
         source: 'ocr' as const,
         duration_seconds: imgResult.duration_seconds || undefined,
         distance_km: imgResult.distance_km || undefined,
@@ -164,6 +167,7 @@ export default function WorkoutPage() {
   const resetImage = () => {
     setImgPreview(null); setImgFile(null)
     setImgResult(null); setImgSaved(false); setImgError('')
+    setImgDate(today())
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -244,15 +248,42 @@ export default function WorkoutPage() {
           {imgResult && !imgSaved && (
             <div className="space-y-3 animate-slide-up">
               <p className="text-xs text-orange-400 font-medium">추출된 데이터 확인 후 저장하세요</p>
+
+              {/* 날짜 선택 (항상 표시) */}
+              <div>
+                <label className="block text-xs text-gray-500 uppercase tracking-widest mb-1.5">
+                  운동 날짜
+                </label>
+                <input
+                  type="date"
+                  value={imgDate}
+                  onChange={e => setImgDate(e.target.value)}
+                  max={today()}
+                  className="input-field"
+                />
+                {imgResult.date && imgResult.date !== imgDate && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    이미지에서 감지된 날짜: {imgResult.date}
+                    <button
+                      onClick={() => setImgDate(imgResult.date!)}
+                      className="ml-2 text-orange-400 hover:text-orange-300"
+                    >
+                      복원
+                    </button>
+                  </p>
+                )}
+              </div>
+
+              {/* 추출 데이터 */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {[
                   { label: '타입', value: imgResult.type },
-                  { label: '날짜', value: imgResult.date },
                   { label: '거리', value: imgResult.distance_km ? `${imgResult.distance_km}km` : null },
-                  { label: '시간', value: imgResult.duration_seconds ? `${Math.floor(imgResult.duration_seconds/60)}분` : null },
+                  { label: '시간', value: imgResult.duration_seconds ? `${Math.floor(imgResult.duration_seconds/60)}분 ${imgResult.duration_seconds%60}초` : null },
                   { label: '페이스', value: imgResult.avg_pace_seconds ? `${Math.floor(imgResult.avg_pace_seconds/60)}:${String(imgResult.avg_pace_seconds%60).padStart(2,'0')}/km` : null },
                   { label: '심박수', value: imgResult.avg_heart_rate ? `${imgResult.avg_heart_rate}bpm` : null },
                   { label: '칼로리', value: imgResult.calories ? `${imgResult.calories}kcal` : null },
+                  { label: '고도', value: imgResult.elevation_gain_m ? `+${imgResult.elevation_gain_m}m` : null },
                   { label: '신뢰도', value: imgResult.confidence ? `${Math.round(imgResult.confidence * 100)}%` : null },
                 ].filter(d => d.value).map(d => (
                   <div key={d.label} className="bg-[#0F0F0F] rounded-lg px-3 py-2">
@@ -261,14 +292,18 @@ export default function WorkoutPage() {
                   </div>
                 ))}
               </div>
+
               <div className="flex gap-2">
                 <button onClick={handleImageSave} disabled={loading}
                   className="flex-1 btn-primary flex items-center justify-center gap-2">
                   {loading ? <><Loader2 size={14} className="animate-spin" />저장 중...</>
                     : <><Save size={14} />운동 기록으로 저장</>}
                 </button>
-                <button onClick={() => { setOcrData(imgResult); setMode('manual') }}
-                  className="btn-secondary text-sm px-3">
+                <button
+                  onClick={() => { setOcrData({ ...imgResult, date: imgDate }); setMode('manual') }}
+                  className="btn-secondary text-sm px-3"
+                  title="폼에서 직접 수정"
+                >
                   <Pencil size={14} />
                 </button>
               </div>
