@@ -1,13 +1,13 @@
 import { NavLink } from 'react-router-dom'
 import {
   Activity, Scale, BarChart2, Target, FileText,
-  MessageSquare, LogOut, Zap, Menu, X, ScanText,
+  MessageSquare, LogOut, Zap, Menu, X,
 } from 'lucide-react'
 import { useState } from 'react'
 import { auth } from '../../lib/supabase'
 import { useAppStore } from '../../store/useAppStore'
 
-const NAV_ITEMS = [
+export const NAV_ITEMS = [
   { to: '/', icon: Activity, label: '대시보드', end: true },
   { to: '/workout', icon: Zap, label: '운동 기록' },
   { to: '/weight', icon: Scale, label: '체중 관리' },
@@ -15,7 +15,6 @@ const NAV_ITEMS = [
   { to: '/goals', icon: Target, label: '목표 관리' },
   { to: '/reports', icon: FileText, label: '리포트' },
   { to: '/coach', icon: MessageSquare, label: 'AI 코치' },
-  { to: '/image-analysis', icon: ScanText, label: '이미지 분석' },
 ]
 
 export default function Sidebar() {

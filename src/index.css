@@ -82,6 +82,11 @@
     display: none;
   }
 
+  /* iOS safe area (노치/홈바) */
+  .pb-safe {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+
   .scrollbar-thin {
     scrollbar-width: thin;
   }
