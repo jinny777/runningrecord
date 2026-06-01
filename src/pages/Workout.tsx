@@ -119,17 +119,26 @@ export default function WorkoutPage() {
   }
 
   const handleSubmit = async (formData: Omit<Workout, 'id' | 'created_at' | 'user_id'>) => {
-    if (!user) return
     setLoading(true)
     try {
-      const { data, error } = await workoutApi.create({ ...formData, user_id: user.id })
-      if (error) throw new Error(error.message)
-      if (data) {
-        addWorkout(data)
-        setMode('list')
-        setOcrData(null)
-        toast.success('운동 기록이 저장되었습니다!')
+      if (user) {
+        // 로그인 상태: Supabase 저장
+        const { data, error } = await workoutApi.create({ ...formData, user_id: user.id })
+        if (error) throw new Error(error.message)
+        if (data) addWorkout(data)
+      } else {
+        // 게스트 모드: 로컬만 저장
+        addWorkout({
+          ...formData,
+          id: crypto.randomUUID(),
+          user_id: 'guest',
+          created_at: new Date().toISOString(),
+        })
+        toast.info('게스트 모드: 이 기기에만 저장됩니다. 로그인하면 클라우드에 저장됩니다.')
       }
+      setMode('list')
+      setOcrData(null)
+      toast.success('운동 기록이 저장되었습니다!')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '저장 실패')
     } finally {

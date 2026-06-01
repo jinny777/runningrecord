@@ -33,19 +33,26 @@ export default function WeightPage() {
   }
 
   const handleSubmit = async (formData: Omit<WeightRecord, 'id' | 'created_at' | 'user_id'>) => {
-    if (!user) return
     setLoading(true)
     try {
-      const { data, error } = await weightApi.create({ ...formData, user_id: user.id })
-      if (error) throw error
-      if (data) {
-        addWeightRecord(data)
-        setMode('list')
-        setOcrData(null)
-        toast.success('체중이 기록되었습니다!')
+      if (user) {
+        const { data, error } = await weightApi.create({ ...formData, user_id: user.id })
+        if (error) throw new Error(error.message)
+        if (data) addWeightRecord(data)
+      } else {
+        addWeightRecord({
+          ...formData,
+          id: crypto.randomUUID(),
+          user_id: 'guest',
+          created_at: new Date().toISOString(),
+        })
+        toast.info('게스트 모드: 이 기기에만 저장됩니다.')
       }
-    } catch {
-      toast.error('저장 실패. 다시 시도해주세요.')
+      setMode('list')
+      setOcrData(null)
+      toast.success('체중이 기록되었습니다!')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '저장 실패')
     } finally {
       setLoading(false)
     }

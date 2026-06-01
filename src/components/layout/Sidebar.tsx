@@ -1,7 +1,7 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   Activity, Scale, BarChart2, Target, FileText,
-  MessageSquare, LogOut, Zap, Menu, X,
+  MessageSquare, LogOut, Zap, Menu, X, LogIn, CloudOff,
 } from 'lucide-react'
 import { useState } from 'react'
 import { auth } from '../../lib/supabase'
@@ -20,6 +20,8 @@ export const NAV_ITEMS = [
 export default function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const reset = useAppStore(s => s.reset)
+  const user = useAppStore(s => s.user)
+  const navigate = useNavigate()
 
   const handleSignOut = async () => {
     await auth.signOut()
@@ -88,15 +90,34 @@ export default function Sidebar() {
           ))}
         </nav>
 
-        {/* Sign out */}
-        <div className="px-3 py-4 border-t border-[#1E1E1E]">
-          <button
-            onClick={handleSignOut}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-gray-500 hover:text-red-400 hover:bg-red-500/5 transition-all"
-          >
-            <LogOut size={18} />
-            로그아웃
-          </button>
+        {/* 로그인 상태 */}
+        <div className="px-3 py-4 border-t border-[#1E1E1E] space-y-2">
+          {user ? (
+            <>
+              <p className="text-xs text-gray-600 px-3 truncate">{user.email}</p>
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-gray-500 hover:text-red-400 hover:bg-red-500/5 transition-all"
+              >
+                <LogOut size={18} />
+                로그아웃
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/5 border border-yellow-500/20">
+                <CloudOff size={13} className="text-yellow-500 shrink-0" />
+                <p className="text-xs text-yellow-600">게스트 모드 · 로컬 저장</p>
+              </div>
+              <button
+                onClick={() => { navigate('/auth'); setMobileOpen(false) }}
+                className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-orange-400 hover:bg-orange-500/10 transition-all"
+              >
+                <LogIn size={18} />
+                로그인 / 회원가입
+              </button>
+            </>
+          )}
         </div>
       </aside>
     </>
