@@ -83,7 +83,7 @@ export default function WorkoutPage() {
   }
 
   const handleImageSave = async () => {
-    if (!imgResult || !user) return
+    if (!imgResult) return
     setLoading(true)
     try {
       const rawType = String(imgResult.type ?? 'running').toLowerCase()
@@ -91,11 +91,10 @@ export default function WorkoutPage() {
         ? (rawType as Workout['type'])
         : 'running'
 
-      const { data, error } = await workoutApi.create({
-        user_id: user.id,
+      const workoutData = {
         type: validType,
         date: imgResult.date || today(),
-        source: 'ocr',
+        source: 'ocr' as const,
         duration_seconds: imgResult.duration_seconds || undefined,
         distance_km: imgResult.distance_km || undefined,
         avg_pace_seconds: imgResult.avg_pace_seconds || undefined,
@@ -104,13 +103,23 @@ export default function WorkoutPage() {
         calories: imgResult.calories || undefined,
         elevation_gain_m: imgResult.elevation_gain_m || undefined,
         raw_ocr_data: imgResult as Record<string, unknown>,
-      })
-      if (error) throw new Error(error.message)
-      if (data) {
-        addWorkout(data)
-        setImgSaved(true)
-        toast.success('운동 기록이 저장되었습니다!')
       }
+
+      if (user) {
+        const { data, error } = await workoutApi.create({ ...workoutData, user_id: user.id })
+        if (error) throw new Error(error.message)
+        if (data) addWorkout(data)
+      } else {
+        addWorkout({
+          ...workoutData,
+          id: crypto.randomUUID(),
+          user_id: 'guest',
+          created_at: new Date().toISOString(),
+        })
+        toast.info('게스트 모드: 이 기기에만 저장됩니다.')
+      }
+      setImgSaved(true)
+      toast.success('운동 기록이 저장되었습니다!')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '저장 실패')
     } finally {

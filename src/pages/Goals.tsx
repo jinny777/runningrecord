@@ -36,26 +36,35 @@ export default function GoalsPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user || !form.target_value) return
+    if (!form.target_value) return
     setLoading(true)
     try {
-      const { data, error } = await goalApi.create({
-        user_id: user.id,
+      const goalData = {
         type: form.type,
         title: selectedTemplate.title,
         target_value: +form.target_value,
         current_value: 0,
         unit: selectedTemplate.unit,
         deadline: form.deadline || undefined,
-        status: 'active',
-      })
-      if (error) throw error
-      if (data) {
-        addGoal(data)
-        setShowForm(false)
-        setForm({ type: 'target_weight', target_value: '', deadline: '' })
-        toast.success('목표가 설정되었습니다!')
+        status: 'active' as const,
       }
+
+      if (user) {
+        const { data, error } = await goalApi.create({ ...goalData, user_id: user.id })
+        if (error) throw error
+        if (data) addGoal(data)
+      } else {
+        addGoal({
+          ...goalData,
+          id: crypto.randomUUID(),
+          user_id: 'guest',
+          created_at: new Date().toISOString(),
+        })
+        toast.info('게스트 모드: 이 기기에만 저장됩니다.')
+      }
+      setShowForm(false)
+      setForm({ type: 'target_weight', target_value: '', deadline: '' })
+      toast.success('목표가 설정되었습니다!')
     } catch {
       toast.error('목표 저장 실패')
     } finally {

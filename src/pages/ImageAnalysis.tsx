@@ -107,15 +107,20 @@ export default function ImageAnalysisPage() {
   }
 
   const saveAsWorkout = async () => {
-    if (!result?.structuredData || !user) return
+    if (!result?.structuredData) return
     setSaving(true)
     try {
-      const { data, error } = await workoutApi.create({
-        ...toWorkout(result.structuredData),
-        user_id: user.id,
-      })
-      if (error) throw new Error(error.message)
-      if (data) { addWorkout(data); setSaved(true); toast.success('운동 기록이 저장되었습니다!') }
+      const workoutData = toWorkout(result.structuredData)
+      if (user) {
+        const { data, error } = await workoutApi.create({ ...workoutData, user_id: user.id })
+        if (error) throw new Error(error.message)
+        if (data) addWorkout(data)
+      } else {
+        addWorkout({ ...workoutData, id: crypto.randomUUID(), user_id: 'guest', created_at: new Date().toISOString() })
+        toast.info('게스트 모드: 이 기기에만 저장됩니다.')
+      }
+      setSaved(true)
+      toast.success('운동 기록이 저장되었습니다!')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '저장 실패')
     } finally {
@@ -124,17 +129,22 @@ export default function ImageAnalysisPage() {
   }
 
   const saveAsWeight = async () => {
-    if (!result?.structuredData || !user) return
+    if (!result?.structuredData) return
     const weightKg = Number(result.structuredData.weight_kg)
     if (!weightKg) { toast.error('체중 데이터를 찾을 수 없습니다.'); return }
     setSaving(true)
     try {
-      const { data, error } = await weightApi.create({
-        ...toWeightRecord(result.structuredData),
-        user_id: user.id,
-      })
-      if (error) throw new Error(error.message)
-      if (data) { addWeightRecord(data); setSaved(true); toast.success('체중 기록이 저장되었습니다!') }
+      const weightData = toWeightRecord(result.structuredData)
+      if (user) {
+        const { data, error } = await weightApi.create({ ...weightData, user_id: user.id })
+        if (error) throw new Error(error.message)
+        if (data) addWeightRecord(data)
+      } else {
+        addWeightRecord({ ...weightData, id: crypto.randomUUID(), user_id: 'guest', created_at: new Date().toISOString() })
+        toast.info('게스트 모드: 이 기기에만 저장됩니다.')
+      }
+      setSaved(true)
+      toast.success('체중 기록이 저장되었습니다!')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '저장 실패')
     } finally {
