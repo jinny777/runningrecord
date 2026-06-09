@@ -22,10 +22,62 @@ function App() {
   const setWeightRecords = useAppStore(s => s.setWeightRecords)
   const setGoals = useAppStore(s => s.setGoals)
 
-  const loadUserData = (userId: string) => {
-    workoutApi.list(userId).then(r => { if (r.data) setWorkouts(r.data) })
-    weightApi.list(userId).then(r => { if (r.data) setWeightRecords(r.data) })
-    goalApi.list(userId).then(r => { if (r.data) setGoals(r.data) })
+  const loadUserData = async (userId: string) => {
+    const state = useAppStore.getState()
+
+    // 게스트 데이터 수집 (로그인 전 로컬 저장 데이터)
+    const guestWorkouts = state.workouts.filter(w => w.user_id === 'guest')
+    const guestWeights = state.weightRecords.filter(r => r.user_id === 'guest')
+    const guestGoals = state.goals.filter(g => g.user_id === 'guest')
+
+    const [workoutsRes, weightRes, goalsRes] = await Promise.all([
+      workoutApi.list(userId),
+      weightApi.list(userId),
+      goalApi.list(userId),
+    ])
+
+    const cloudWorkouts = workoutsRes.data ?? []
+    const cloudWeights = weightRes.data ?? []
+    const cloudGoals = goalsRes.data ?? []
+
+    // 게스트 운동 기록 → Supabase 이전
+    if (guestWorkouts.length > 0) {
+      const migrated: typeof cloudWorkouts = []
+      for (const w of guestWorkouts) {
+        const { id: _id, user_id: _uid, created_at: _ca, ...rest } = w
+        const { data } = await workoutApi.create({ ...rest, user_id: userId })
+        if (data) migrated.push(data)
+      }
+      setWorkouts([...migrated, ...cloudWorkouts])
+    } else {
+      setWorkouts(cloudWorkouts)
+    }
+
+    // 게스트 체중 기록 → Supabase 이전
+    if (guestWeights.length > 0) {
+      const migrated: typeof cloudWeights = []
+      for (const r of guestWeights) {
+        const { id: _id, user_id: _uid, created_at: _ca, ...rest } = r
+        const { data } = await weightApi.create({ ...rest, user_id: userId })
+        if (data) migrated.push(data)
+      }
+      setWeightRecords([...migrated, ...cloudWeights])
+    } else {
+      setWeightRecords(cloudWeights)
+    }
+
+    // 게스트 목표 → Supabase 이전
+    if (guestGoals.length > 0) {
+      const migrated: typeof cloudGoals = []
+      for (const g of guestGoals) {
+        const { id: _id, user_id: _uid, created_at: _ca, ...rest } = g
+        const { data } = await goalApi.create({ ...rest, user_id: userId })
+        if (data) migrated.push(data)
+      }
+      setGoals([...migrated, ...cloudGoals])
+    } else {
+      setGoals(cloudGoals)
+    }
   }
 
   useEffect(() => {
