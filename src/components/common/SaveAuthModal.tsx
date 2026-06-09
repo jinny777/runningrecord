@@ -38,7 +38,9 @@ export default function SaveAuthModal({ onAuthenticated, onGuestSave, onClose }:
       setError('인증에 실패했습니다. 다시 시도해주세요.')
     } catch (err) {
       const msg = err instanceof Error ? err.message : '오류가 발생했습니다.'
-      if (msg.includes('Invalid login credentials')) {
+      if (msg.includes('Failed to fetch') || msg.includes('fetch')) {
+        setError('서버에 연결할 수 없습니다. Supabase 대시보드 → Authentication → URL Configuration에서 Site URL을 https://runningrecord.onrender.com 으로 설정해주세요.')
+      } else if (msg.includes('Invalid login credentials')) {
         setError('이메일 또는 비밀번호가 틀렸습니다.')
       } else if (msg.includes('already registered')) {
         setError('이미 가입된 이메일입니다. 비밀번호를 확인해주세요.')
