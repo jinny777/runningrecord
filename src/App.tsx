@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { auth, profileApi } from './lib/supabase'
+import { auth, profileApi, workoutApi, weightApi, goalApi } from './lib/supabase'
 import { useAppStore } from './store/useAppStore'
 
 import Layout from './components/layout/Layout'
@@ -18,6 +18,15 @@ function App() {
   const setUser = useAppStore(s => s.setUser)
   const setSession = useAppStore(s => s.setSession)
   const setProfile = useAppStore(s => s.setProfile)
+  const setWorkouts = useAppStore(s => s.setWorkouts)
+  const setWeightRecords = useAppStore(s => s.setWeightRecords)
+  const setGoals = useAppStore(s => s.setGoals)
+
+  const loadUserData = (userId: string) => {
+    workoutApi.list(userId).then(r => { if (r.data) setWorkouts(r.data) })
+    weightApi.list(userId).then(r => { if (r.data) setWeightRecords(r.data) })
+    goalApi.list(userId).then(r => { if (r.data) setGoals(r.data) })
+  }
 
   useEffect(() => {
     // 초기 로그인 상태 확인
@@ -27,6 +36,7 @@ function App() {
         profileApi.get(data.user.id).then(r => {
           if (r.data) setProfile(r.data)
         })
+        loadUserData(data.user.id)
       }
     })
 
@@ -37,6 +47,7 @@ function App() {
         profileApi.get(sess.user.id).then(r => {
           if (r.data) setProfile(r.data)
         })
+        loadUserData(sess.user.id)
       } else {
         setUser(null)
         setProfile(null)

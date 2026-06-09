@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { Plus, Camera, Pencil, X, ScanText, Upload, Loader2, Sparkles, Save, CheckCircle2 } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
-import { workoutApi } from '../lib/supabase'
+import { workoutApi, storageApi } from '../lib/supabase'
 import WorkoutForm from '../components/workout/WorkoutForm'
 import WorkoutCard from '../components/workout/WorkoutCard'
 import OCRUploader from '../components/common/OCRUploader'
@@ -94,6 +94,13 @@ export default function WorkoutPage() {
         ? (rawType as Workout['type'])
         : 'running'
 
+      // 이미지를 Supabase Storage에 업로드 (로그인 시)
+      let ocr_image_url: string | undefined = undefined
+      if (imgFile && user) {
+        const { url } = await storageApi.uploadOCRImage(user.id, imgFile)
+        if (url) ocr_image_url = url
+      }
+
       const workoutData = {
         type: validType,
         date: imgDate,
@@ -105,6 +112,7 @@ export default function WorkoutPage() {
         max_heart_rate: imgResult.max_heart_rate || undefined,
         calories: imgResult.calories || undefined,
         elevation_gain_m: imgResult.elevation_gain_m || undefined,
+        ocr_image_url,
         raw_ocr_data: imgResult as Record<string, unknown>,
       }
 
