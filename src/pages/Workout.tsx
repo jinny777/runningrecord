@@ -5,6 +5,7 @@ import { workoutApi, storageApi } from '../lib/supabase'
 import WorkoutForm from '../components/workout/WorkoutForm'
 import WorkoutCard from '../components/workout/WorkoutCard'
 import OCRUploader from '../components/common/OCRUploader'
+import SaveAuthModal from '../components/common/SaveAuthModal'
 import type { WorkoutOCRResult, Workout } from '../types'
 import { analyzeImageText } from '../lib/claude'
 import { fileToBase64, today } from '../utils/formatters'
@@ -23,6 +24,9 @@ export default function WorkoutPage() {
   const [mode, setMode] = useState<Mode>('list')
   const [ocrData, setOcrData] = useState<Partial<WorkoutOCRResult> | null>(null)
   const [loading, setLoading] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [pendingFormData, setPendingFormData] = useState<Omit<Workout, 'id' | 'created_at' | 'user_id'> | null>(null)
+  const [pendingImageSave, setPendingImageSave] = useState(false)
 
   // 이미지 분석 상태
   const [imgPreview, setImgPreview] = useState<string | null>(null)
@@ -85,50 +89,48 @@ export default function WorkoutPage() {
     }
   }
 
+  const buildImageWorkoutData = (validType: Workout['type'], ocr_image_url?: string) => ({
+    type: validType,
+    date: imgDate,
+    source: 'ocr' as const,
+    duration_seconds: imgResult?.duration_seconds || undefined,
+    distance_km: imgResult?.distance_km || undefined,
+    avg_pace_seconds: imgResult?.avg_pace_seconds || undefined,
+    avg_heart_rate: imgResult?.avg_heart_rate || undefined,
+    max_heart_rate: imgResult?.max_heart_rate || undefined,
+    calories: imgResult?.calories || undefined,
+    elevation_gain_m: imgResult?.elevation_gain_m || undefined,
+    ocr_image_url,
+    raw_ocr_data: imgResult as Record<string, unknown>,
+  })
+
+  const saveImageWorkout = async (userId: string) => {
+    const rawType = String(imgResult?.type ?? 'running').toLowerCase()
+    const validType = VALID_WORKOUT_TYPES.includes(rawType as typeof VALID_WORKOUT_TYPES[number])
+      ? (rawType as Workout['type'])
+      : 'running'
+    let ocr_image_url: string | undefined = undefined
+    if (imgFile) {
+      const { url } = await storageApi.uploadOCRImage(userId, imgFile)
+      if (url) ocr_image_url = url
+    }
+    const workoutData = buildImageWorkoutData(validType, ocr_image_url)
+    const { data, error } = await workoutApi.create({ ...workoutData, user_id: userId })
+    if (error) throw new Error(error.message)
+    if (data) addWorkout(data)
+  }
+
   const handleImageSave = async () => {
     if (!imgResult) return
+    if (!user) {
+      // 게스트: 모달로 계정 생성 유도
+      setPendingImageSave(true)
+      setShowAuthModal(true)
+      return
+    }
     setLoading(true)
     try {
-      const rawType = String(imgResult.type ?? 'running').toLowerCase()
-      const validType = VALID_WORKOUT_TYPES.includes(rawType as typeof VALID_WORKOUT_TYPES[number])
-        ? (rawType as Workout['type'])
-        : 'running'
-
-      // 이미지를 Supabase Storage에 업로드 (로그인 시)
-      let ocr_image_url: string | undefined = undefined
-      if (imgFile && user) {
-        const { url } = await storageApi.uploadOCRImage(user.id, imgFile)
-        if (url) ocr_image_url = url
-      }
-
-      const workoutData = {
-        type: validType,
-        date: imgDate,
-        source: 'ocr' as const,
-        duration_seconds: imgResult.duration_seconds || undefined,
-        distance_km: imgResult.distance_km || undefined,
-        avg_pace_seconds: imgResult.avg_pace_seconds || undefined,
-        avg_heart_rate: imgResult.avg_heart_rate || undefined,
-        max_heart_rate: imgResult.max_heart_rate || undefined,
-        calories: imgResult.calories || undefined,
-        elevation_gain_m: imgResult.elevation_gain_m || undefined,
-        ocr_image_url,
-        raw_ocr_data: imgResult as Record<string, unknown>,
-      }
-
-      if (user) {
-        const { data, error } = await workoutApi.create({ ...workoutData, user_id: user.id })
-        if (error) throw new Error(error.message)
-        if (data) addWorkout(data)
-      } else {
-        addWorkout({
-          ...workoutData,
-          id: crypto.randomUUID(),
-          user_id: 'guest',
-          created_at: new Date().toISOString(),
-        })
-        toast.info('게스트 모드: 이 기기에만 저장됩니다.')
-      }
+      await saveImageWorkout(user.id)
       setImgSaved(true)
       toast.success('운동 기록이 저장되었습니다!')
     } catch (err) {
@@ -138,24 +140,55 @@ export default function WorkoutPage() {
     }
   }
 
-  const handleSubmit = async (formData: Omit<Workout, 'id' | 'created_at' | 'user_id'>) => {
+  const handleAuthAndSaveImage = async (userId: string) => {
+    setShowAuthModal(false)
+    setPendingImageSave(false)
     setLoading(true)
     try {
-      if (user) {
-        // 로그인 상태: Supabase 저장
-        const { data, error } = await workoutApi.create({ ...formData, user_id: user.id })
-        if (error) throw new Error(error.message)
-        if (data) addWorkout(data)
-      } else {
-        // 게스트 모드: 로컬만 저장
-        addWorkout({
-          ...formData,
-          id: crypto.randomUUID(),
-          user_id: 'guest',
-          created_at: new Date().toISOString(),
-        })
-        toast.info('게스트 모드: 이 기기에만 저장됩니다. 로그인하면 클라우드에 저장됩니다.')
-      }
+      await saveImageWorkout(userId)
+      setImgSaved(true)
+      toast.success('운동 기록이 저장되었습니다!')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '저장 실패')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGuestSaveImage = () => {
+    if (!imgResult) return
+    setShowAuthModal(false)
+    setPendingImageSave(false)
+    const rawType = String(imgResult.type ?? 'running').toLowerCase()
+    const validType = VALID_WORKOUT_TYPES.includes(rawType as typeof VALID_WORKOUT_TYPES[number])
+      ? (rawType as Workout['type'])
+      : 'running'
+    addWorkout({
+      ...buildImageWorkoutData(validType),
+      id: crypto.randomUUID(),
+      user_id: 'guest',
+      created_at: new Date().toISOString(),
+    })
+    setImgSaved(true)
+    toast.info('이 기기에만 저장됩니다.')
+  }
+
+  const saveWorkout = async (formData: Omit<Workout, 'id' | 'created_at' | 'user_id'>, userId: string) => {
+    const { data, error } = await workoutApi.create({ ...formData, user_id: userId })
+    if (error) throw new Error(error.message)
+    if (data) addWorkout(data)
+  }
+
+  const handleSubmit = async (formData: Omit<Workout, 'id' | 'created_at' | 'user_id'>) => {
+    if (!user) {
+      // 게스트: 모달로 계정 생성 유도
+      setPendingFormData(formData)
+      setShowAuthModal(true)
+      return
+    }
+    setLoading(true)
+    try {
+      await saveWorkout(formData, user.id)
       setMode('list')
       setOcrData(null)
       toast.success('운동 기록이 저장되었습니다!')
@@ -164,6 +197,38 @@ export default function WorkoutPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleAuthAndSaveForm = async (userId: string) => {
+    if (!pendingFormData) return
+    setShowAuthModal(false)
+    setLoading(true)
+    try {
+      await saveWorkout(pendingFormData, userId)
+      setMode('list')
+      setOcrData(null)
+      setPendingFormData(null)
+      toast.success('운동 기록이 저장되었습니다!')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '저장 실패')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGuestSaveForm = () => {
+    if (!pendingFormData) return
+    setShowAuthModal(false)
+    addWorkout({
+      ...pendingFormData,
+      id: crypto.randomUUID(),
+      user_id: 'guest',
+      created_at: new Date().toISOString(),
+    })
+    setPendingFormData(null)
+    setMode('list')
+    setOcrData(null)
+    toast.info('이 기기에만 저장됩니다. 로그인하면 다른 기기에서도 볼 수 있어요.')
   }
 
   const handleDelete = async (id: string) => {
@@ -181,6 +246,13 @@ export default function WorkoutPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {showAuthModal && (
+        <SaveAuthModal
+          onAuthenticated={pendingImageSave ? handleAuthAndSaveImage : handleAuthAndSaveForm}
+          onGuestSave={pendingImageSave ? handleGuestSaveImage : handleGuestSaveForm}
+          onClose={() => { setShowAuthModal(false); setPendingImageSave(false) }}
+        />
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

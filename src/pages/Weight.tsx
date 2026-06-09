@@ -6,6 +6,7 @@ import WeightForm from '../components/weight/WeightForm'
 import WeightChart from '../components/weight/WeightChart'
 import OCRUploader from '../components/common/OCRUploader'
 import MetricCard from '../components/common/MetricCard'
+import SaveAuthModal from '../components/common/SaveAuthModal'
 import type { WeightRecord, WeightOCRResult } from '../types'
 import { formatDate, getBMILabel } from '../utils/formatters'
 import { calcWeightTrend } from '../services/analysis'
@@ -23,6 +24,8 @@ export default function WeightPage() {
   const [mode, setMode] = useState<Mode>('list')
   const [ocrData, setOcrData] = useState<Partial<WeightOCRResult> | null>(null)
   const [loading, setLoading] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [pendingFormData, setPendingFormData] = useState<Omit<WeightRecord, 'id' | 'created_at' | 'user_id'> | null>(null)
 
   const latest = weightRecords[0]
   const trend = calcWeightTrend(weightRecords.slice(0, 30))
@@ -32,22 +35,21 @@ export default function WeightPage() {
     setMode('manual')
   }
 
+  const saveWeight = async (formData: Omit<WeightRecord, 'id' | 'created_at' | 'user_id'>, userId: string) => {
+    const { data, error } = await weightApi.create({ ...formData, user_id: userId })
+    if (error) throw new Error(error.message)
+    if (data) addWeightRecord(data)
+  }
+
   const handleSubmit = async (formData: Omit<WeightRecord, 'id' | 'created_at' | 'user_id'>) => {
+    if (!user) {
+      setPendingFormData(formData)
+      setShowAuthModal(true)
+      return
+    }
     setLoading(true)
     try {
-      if (user) {
-        const { data, error } = await weightApi.create({ ...formData, user_id: user.id })
-        if (error) throw new Error(error.message)
-        if (data) addWeightRecord(data)
-      } else {
-        addWeightRecord({
-          ...formData,
-          id: crypto.randomUUID(),
-          user_id: 'guest',
-          created_at: new Date().toISOString(),
-        })
-        toast.info('게스트 모드: 이 기기에만 저장됩니다.')
-      }
+      await saveWeight(formData, user.id)
       setMode('list')
       setOcrData(null)
       toast.success('체중이 기록되었습니다!')
@@ -58,6 +60,38 @@ export default function WeightPage() {
     }
   }
 
+  const handleAuthAndSave = async (userId: string) => {
+    if (!pendingFormData) return
+    setShowAuthModal(false)
+    setLoading(true)
+    try {
+      await saveWeight(pendingFormData, userId)
+      setMode('list')
+      setOcrData(null)
+      setPendingFormData(null)
+      toast.success('체중이 기록되었습니다!')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '저장 실패')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGuestSave = () => {
+    if (!pendingFormData) return
+    setShowAuthModal(false)
+    addWeightRecord({
+      ...pendingFormData,
+      id: crypto.randomUUID(),
+      user_id: 'guest',
+      created_at: new Date().toISOString(),
+    })
+    setPendingFormData(null)
+    setMode('list')
+    setOcrData(null)
+    toast.info('이 기기에만 저장됩니다. 로그인하면 다른 기기에서도 볼 수 있어요.')
+  }
+
   const handleDelete = async (id: string) => {
     await weightApi.delete(id)
     removeWeightRecord(id)
@@ -66,6 +100,13 @@ export default function WeightPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {showAuthModal && (
+        <SaveAuthModal
+          onAuthenticated={handleAuthAndSave}
+          onGuestSave={handleGuestSave}
+          onClose={() => setShowAuthModal(false)}
+        />
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
